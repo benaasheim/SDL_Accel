@@ -9,7 +9,6 @@
 #ifndef Scene_h
 #define Scene_h
 
-#include "Object.h"
 #include "Light.h"
 #include "Configuration.h"
 #include "Material.h"
@@ -20,8 +19,6 @@
 #include "Planes.h"
 
 // Scene information
-extern unsigned int numObjects;
-extern Object* objects;
 extern unsigned int numLights;
 extern Light* lights;
 extern unsigned int numMaterials;

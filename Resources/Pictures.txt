@@ -1,0 +1,7 @@
+Nickname     url
+earth_crop  2k_earth_daymap2.bmp
+checker_rnb 1434915-32.bmp
+tile_map    stock-vector-world-map-pixel-style-415670986.bmp
+colors      image.BMP
+earth       2k_earth_daymap.bmp
+earthsq     2k_earth_daymap1.bmp

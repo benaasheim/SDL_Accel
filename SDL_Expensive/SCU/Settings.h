@@ -10,8 +10,8 @@
 #define Settings_h
 
 // Control variables for the different features
-#define window_width 700
-#define window_height 700
+#define window_width 300
+#define window_height 300
 #define aspect_ratio (window_width / window_height)
 #define resolution 1
 #define dheight (window_height * resolution)

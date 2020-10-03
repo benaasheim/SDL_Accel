@@ -26,7 +26,7 @@ void _init(SDL_Window* win, Uint32 * p, SDL_PixelFormat* S) {
     init_Errors(win);
     initKeyboardKeys();
     init_Scene();
-    init_Cam((simd_float3){0, 1, 0}, p, S);
+    init_Cam((simd_float3){0, 1, -8}, p, S);
 }
 
 void set_threadargs(pthread_t* thread_lis, int* thread_args) {
@@ -67,7 +67,21 @@ int main(int argc, const char * argv[]) {
     unsigned int frames = 0;
     pthread_t thread_lis[threads];
     int thread_args[threads * 2];
-        
+    
+    simd_float3 a, b, c;
+    a = simd_make_float3(0, 0, 1);
+    b = simd_make_float3(0, 1, 0);
+    float x = simd_dot(a, b);
+    
+    c = simd_cross(a, b);
+    printf("CROSS; %f\n", x);
+    printf("TN: %f %f %f \n", c.x, c.y, c.z);
+    
+    Triangle triangle = {{1.0, 1.0, -7.0}, {1.0, 4.5, -7.0}, {-1, 1, -7.0}};
+    triangle.n = simd_normalize(simd_cross((triangle.b - triangle.a), (triangle.c - triangle.a)));
+    Ray ray = {{0, 1, -8}, {0, 0, 1}};
+    float tttt = calcTriT(ray, &triangle, &c);
+    
     // retutns zero on success else non-zero
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         printf("error initializing SDL: %s\n", SDL_GetError());

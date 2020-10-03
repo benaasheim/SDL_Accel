@@ -10,8 +10,8 @@
 #define Material_h
 
 #include <stdio.h>
-#include "Object.h"
 #include "Light.h"
+#include <SDL2/SDL.h>
 #include "Hit.h"
 #include "Settings.h"
 #include "Ray.h"
@@ -28,13 +28,13 @@ struct __attribute__ ((__packed__)) Material {
     float ior;
     float shininess;
     int type;
+    int frosting;
 };
 
 typedef struct Material Material;
 
-simd_float3 _shade(Material* mat, Ray* ray, Hit* hit, Light* l, Object* obj);
-
-simd_float3 _shade2(Material* mat, const Ray* ray, Hit* hit, const Light* l, simd_float3 dc);
+simd_float3 _shade2(Material* mat, const Ray* ray, Hit* hit, const Light* l, simd_float3 (*surfaceToImage)(Hit* hit, void* obj), const void* obj, const SDL_Surface* surf);
+simd_float3 _shade3(Material* mat, const Ray* ray, Hit* hit, const Light* l, simd_float3 (*surfaceToImage)(Hit* hit, void* obj), const void* obj, const SDL_Surface* surf);
 
 Material Diffuse_White(void);
 

@@ -23,6 +23,9 @@ void init_Cam(simd_float3 pos, Uint32 * p, SDL_PixelFormat* S) {
     rot.vector.y = 1;
     pixels = p;
     SF = S;
+    right = simd_act(rot, (simd_float3){1, 0, 0});
+    up = simd_act(rot, (simd_float3){0, 1, 0});
+    forward = simd_act(rot, (simd_float3){0, 0, 1});
 }
 
 void move_cam(simd_float3 dir, float amount) {
@@ -91,22 +94,20 @@ void cast_rays(void *arguments) {
     
     simd_float3 col;
     
-    float x, y;
+    int x, y;
     for (y = start; y < end; y++) {
         for (x = 0; x < window_width; x++) {
 #if AntiAlias == true
             
             //reset color
             col *= 0;
-//            printf("HERE");
-            float inc = (1.0f/AntiAliasLevel);
-//            printf("%f\n", inc);
-            for (float yy = 0; yy < 1; yy += inc) {
-                for (float xx = 0; xx < 1; xx += inc) {
+//            float inc = (1.0f/AntiAliasLevel);
+            for (float yy = 0; yy < 1; yy += (1.0f/AntiAliasLevel)) {
+                for (float xx = 0; xx < 1; xx += (1.0f/AntiAliasLevel)) {
                     float xxx = x + xx;
                     float yyy = y + yy;
                     ray.direction = simd_normalize(forward + (AA(xxx) * right) + (up * BB(yyy)));
-                    col += traceColor(ray, 0) * 255;
+                    col += traceColor2(ray, 0) * 255;
                 }
             }
             
@@ -114,49 +115,9 @@ void cast_rays(void *arguments) {
             col /= AntiAliasLevel*AntiAliasLevel;
             
 #else
-            ray.direction = simd_normalize(forward + (AA(x) * right) + (up * BB(y)));
-            col = traceColor2(ray, 0) * 255;
-#endif
-            pixels[(int)y * window_width + (int)x] = SDL_MapRGB(SF, col.x, col.y, col.z);
-        }
-    }
-}
-
-void cast_rays2(void *arguments) {
-    // Ray-tracing loop, for each pixel
-    int* args = (int *)arguments;
-    int start = *args;
-    int end = args[1];
-    Ray ray;
-
-    ray.origin = position;
-    
-    simd_float3 col;
-    
-    float x, y;
-    for (y = start; y < end; y++) {
-        for (x = 0; x < window_width; x++) {
-#if AntiAlias == true
-            
-            //reset color
-            col *= 0;
-//            printf("HERE");
-            float inc = (1.0f/AntiAliasLevel);
-//            printf("%f\n", inc);
-            for (float yy = 0; yy < 1; yy += inc) {
-                for (float xx = 0; xx < 1; xx += inc) {
-                    float xxx = x + xx;
-                    float yyy = y + yy;
-                    ray.direction = simd_normalize(forward + (AA(xxx) * right) + (up * BB(yyy)));
-                    col += traceColor(ray, 0) * 255;
-                }
-            }
-            
-            //finish averaging
-            col /= AntiAliasLevel*AntiAliasLevel;
-            
-#else
-            ray.direction = simd_normalize(forward + (AA(x) * right) + (up * BB(y)));
+            ray.direction =
+            simd_normalize(forward + (AA(x) * right) + (up * BB(y)));
+//            forward;
             col = traceColor2(ray, 0) * 255;
 #endif
             pixels[(int)y * window_width + (int)x] = SDL_MapRGB(SF, col.x, col.y, col.z);

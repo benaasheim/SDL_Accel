@@ -10,26 +10,26 @@
 #define PHONG 1
 #define COOKTORRANCE 0
 
-simd_float3 _shade(Material* mat, Ray* ray, Hit* hit, Light* l, Object* obj) {
+simd_float3 _shade2(Material* mat, const Ray* ray, Hit* hit, const Light* l, simd_float3 (*surfaceToImage)(Hit* hit, void* obj), const void* obj, const SDL_Surface* surf) {
 
     float NdotL, NdotV, NdotH, VdotH, lambertian, specular, roughness, L_length, A = 1.0f;
     simd_float3 C = {0, 0, 0}, L, V, H, N;
-    
+    simd_float3 dc;
     N = hit->normal;
 
     if (l->type == DIRECTIONAL) {
         L = simd_normalize(-l->direction);
+        V = -ray->direction;
+        H = simd_normalize(V + L);
     }
     else if (l->type == POINT) {
         L = l->position - hit->position;
         L_length = simd_length(L);
         L = simd_normalize(L);
-//        V = -ray->direction;
-//        H = simd_normalize(V + L);
+        V = -ray->direction;
+        H = simd_normalize(V + L);
         A = l->constant + l->linear * L_length + l->exponent * L_length * L_length + epsilon;
     }
-    V = -ray->direction;
-    H = simd_normalize(V + L);
     
     //Calculate the dot products required for shading
     NdotL = fminf(simd_dot(N, L), 1.0f);
@@ -50,7 +50,7 @@ simd_float3 _shade(Material* mat, Ray* ray, Hit* hit, Light* l, Object* obj) {
         }
         
         //Add all the terms to C
-        simd_float3 dc = (obj->img == NULL) ? mat->diffuse_color : obj->surfaceToImage(hit->position, hit->normal, obj);
+        dc = (surf == NULL) ? mat->diffuse_color : surfaceToImage(hit, obj);
         C = C + (l->color * dc * lambertian * l->intensity);
         C = C + (mat->specular_color * specular * l->intensity);
     }
@@ -92,7 +92,10 @@ simd_float3 _shade(Material* mat, Ray* ray, Hit* hit, Light* l, Object* obj) {
         //Add all the terms to C
         simd_float3 final_a = NdotL * l->color * l->intensity;
         
-        simd_float3 dc = (obj->img == NULL) ? mat->diffuse_color : obj->surfaceToImage(hit->position, hit->normal, obj);
+
+        
+        dc = (surf == NULL) ? mat->diffuse_color : surfaceToImage(hit, obj);
+        
         
         simd_float3 final_b = dc * K + mat->specular_color * Rs * (1.0f - K);
         C = final_a * final_b;
@@ -104,11 +107,11 @@ simd_float3 _shade(Material* mat, Ray* ray, Hit* hit, Light* l, Object* obj) {
     return C/A;
 }
 
-simd_float3 _shade2(Material* mat, const Ray* ray, Hit* hit, const Light* l, simd_float3 dc) {
+simd_float3 _shade3(Material* mat, const Ray* ray, Hit* hit, const Light* l, simd_float3 (*surfaceToImage)(Hit* hit, void* obj), const void* obj, const SDL_Surface* surf) {
 
     float NdotL, NdotV, NdotH, VdotH, lambertian, specular, roughness, L_length, A = 1.0f;
     simd_float3 C = {0, 0, 0}, L, V, H, N;
-    
+    simd_float3 dc;
     N = hit->normal;
 
     if (l->type == DIRECTIONAL) {
@@ -134,7 +137,6 @@ simd_float3 _shade2(Material* mat, const Ray* ray, Hit* hit, const Light* l, sim
     if (mat->type == PHONG) {
         // Calculate the lambertian term
         lambertian = fminf(NdotL, 1.0f);
-        
         // Calculate the specular term
         if (mat->shininess > 0.0f) {
             specular = powf(NdotH, mat->shininess);
@@ -144,6 +146,7 @@ simd_float3 _shade2(Material* mat, const Ray* ray, Hit* hit, const Light* l, sim
         }
         
         //Add all the terms to C
+        dc = (surf == NULL) ? mat->diffuse_color : surfaceToImage(hit, obj);
         C = C + (l->color * dc * lambertian * l->intensity);
         C = C + (mat->specular_color * specular * l->intensity);
     }
@@ -185,11 +188,9 @@ simd_float3 _shade2(Material* mat, const Ray* ray, Hit* hit, const Light* l, sim
         //Add all the terms to C
         simd_float3 final_a = NdotL * l->color * l->intensity;
         
-//        if (obj->img != NULL) {
-//            printf("HERE");
-//        }
+
         
-        
+        dc = (surf == NULL) ? mat->diffuse_color : surfaceToImage(hit, obj);
         
         
         simd_float3 final_b = dc * K + mat->specular_color * Rs * (1.0f - K);
@@ -200,90 +201,4 @@ simd_float3 _shade2(Material* mat, const Ray* ray, Hit* hit, const Light* l, sim
     }
     
     return C/A;
-}
-
-
-Material Diffuse_White() {
-    simd_float3 ac = {0.01f, 0.01f, 0.01f};
-    simd_float3 dc = {1, 1, 1};
-    simd_float3 sc = {1, 1, 1};
-    float roughness = 0.375;
-    float fresnel = 0.5f;
-    float density = 0.9f;
-    float reflectivity = 0.0f;
-    float refractivity = 0.0f;
-    float ior = 0.0f;
-    float shininess = 0.0f;
-    int type = COOKTORRANCE;
-    return (Material) {ac, dc, sc, roughness, fresnel, density, reflectivity, refractivity, ior, shininess, type};
-}
-Material Diffuse_Red() {
-    simd_float3 ac = {0.01f, 0.01f, 0.01f};
-    simd_float3 dc = {1, 0, 0};
-    simd_float3 sc = {1, 1, 1};
-    float roughness = 0.375;
-    float fresnel = 0.5f;
-    float density = 0.9f;
-    float reflectivity = 0.0f;
-    float refractivity = 0.0f;
-    float ior = 0.0f;
-    float shininess = 0.0f;
-    int type = COOKTORRANCE;
-    return (Material) {ac, dc, sc, roughness, fresnel, density, reflectivity, refractivity, ior, shininess, type};
-}
-Material Diffuse_Blue() {
-    simd_float3 ac = {0.01f, 0.01f, 0.01f};
-    simd_float3 dc = {0, 0, 1};
-    simd_float3 sc = {1, 1, 1};
-    float roughness = 0.375;
-    float fresnel = 0.5f;
-    float density = 0.9f;
-    float reflectivity = 0.0f;
-    float refractivity = 0.0f;
-    float ior = 0.0f;
-    float shininess = 0.0f;
-    int type = COOKTORRANCE;
-    return (Material) {ac, dc, sc, roughness, fresnel, density, reflectivity, refractivity, ior, shininess, type};
-}
-Material Reflective_Metal() {
-    simd_float3 ac = {0.01f, 0.01f, 0.01f};
-    simd_float3 dc = {0, 0, 0};
-    simd_float3 sc = {1, 1, 1};
-    float roughness = 0.1f;
-    float fresnel = 1.0f;
-    float density = 0.5f;
-    float reflectivity = 1.0f;
-    float refractivity = 0.0f;
-    float ior = 0.0f;
-    float shininess = 0.0f;
-    int type = COOKTORRANCE;
-    return (Material) {ac, dc, sc, roughness, fresnel, density, reflectivity, refractivity, ior, shininess, type};
-}
-Material Refractive_Glass() {
-    simd_float3 ac = {0.01f, 0.01f, 0.01f};
-    simd_float3 dc = {0, 0, 0};
-    simd_float3 sc = {1, 1, 1};
-    float roughness = 0.1f;
-    float fresnel = 1.0f;
-    float density = 0.5f;
-    float reflectivity = 0.0f;
-    float refractivity = 1.0f;
-    float ior = 2.0f;
-    float shininess = 0.0f;
-    int type = COOKTORRANCE;
-    return (Material) {ac, dc, sc, roughness, fresnel, density, reflectivity, refractivity, ior, shininess, type};
-}
-Material Diffuse_Sky_Blue() {
-    simd_float3 ac = {0.2f, 0.25f, 0.75f};
-    simd_float3 dc = {0.2f, 0.2f, 0.9f};
-    simd_float3 sc = {1, 1, 1};
-    float roughness = 0.9f;
-    float fresnel = 0.5f;
-    float density = 0.9f;
-    float reflectivity = 0.0f;
-    float refractivity = 0.0f;
-    float ior = 0.0f;
-    float shininess = 0.0f;
-    int type = COOKTORRANCE;
-    return (Material) {ac, dc, sc, roughness, fresnel, density, reflectivity, refractivity, ior, shininess, type};
 }

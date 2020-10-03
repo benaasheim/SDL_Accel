@@ -18,8 +18,6 @@
 
 #include "Scene.h"
 
-
-simd_float3 traceColor(const Ray ray, const int n);
 simd_float3 traceColor2(const Ray ray, const int n);
 
 #endif /* Tracing_h */

@@ -13,37 +13,64 @@ Triangle _triangles[max_triangles];
 unsigned int numTriangles = 0;
 Triangle* triangles  = _triangles;
 
-float calcTriT(const Ray ray, const Triangle* triangle) {
+float calcTriT(const Ray ray, const Triangle* triangle, simd_float3* normal) {
     
-    simd_float3 u = triangle->b - triangle->a;
-    simd_float3 v = triangle->c - triangle->a;
-    simd_float3 w = triangle->a - ray.origin;
-    simd_float3 plane1n = simd_normalize(simd_cross(u, v));
-    
-    float d = simd_dot(plane1n, ray.direction);
+    float d = simd_dot(triangle->n, ray.direction);
+    *normal = triangle->n;
+    float helper = 1;
+    float t;
     
     if (d > 0.0f) {
-        plane1n *= -1;
         d *= -1;
+        *normal *= -1;
+        helper *= -1;
     }
     
-    float t = simd_dot(w, plane1n)/d;
+    float p1 = simd_dot(*normal, ray.origin) ;
+    float p2 = simd_dot(*normal, triangle->a);
+    t = -(p1 - p2) / d;
+
     
-    w = ray.direction * t - w;
-    float uDv = simd_dot(u, v);
-    float wDv = simd_dot(w, v);
-    float vDv = simd_dot(v, v);
-    float wDu = simd_dot(w, u);
-    float uDu = simd_dot(u, u);
+    float denom = simd_dot(*normal, *normal);
     
-    float s1 = (uDv*wDv - vDv*wDu)/(uDv*uDv - uDu*vDv);
-    float t1 = (uDv*wDu - uDu*wDv)/(uDv*uDv - uDu*vDv);
+    simd_float3 P = ray.direction * t + ray.origin;
     
-    if (s1 >= 0.0f && t1 >= 0.0f && s1 + t1 < 1.0f) {
-        return t;
+    //prevents grainy see-through effect on relflective/refractive materials
+    if (t - epsilon <= 0.0f) {
+        return -1;
     }
+
+    simd_float3 C;
+    float u, v;
+
+    // edge 0
+    simd_float3 edge0 = triangle->b - triangle->a;
+    simd_float3 vp0 = P - triangle->a;
+    C = simd_cross(edge0, vp0);
+    C *= helper;
+    if (simd_dot(*normal, C) < 0 ) {
+        return -1; // P is on the right side
+    }
+        
+
+    // edge 1
+    simd_float3 edge1 = triangle->c - triangle->b;
+    simd_float3 vp1 = P - triangle->b;
+    C = simd_cross(edge1, vp1);
+    C *= helper;
+    if ((u = simd_dot(*normal, C)) < 0 )  return -1; // P is on the right side
+
+    // edge 2
+    simd_float3 edge2 = triangle->a - triangle->c;
+    simd_float3 vp2 = P - triangle->c;
+    C = simd_cross(edge2, vp2);
+    C *= helper;
+    if ((v = simd_dot(*normal, C)) < 0 ) return -1; // P is on the right side;
+
+    u /= denom;
+    v /= denom;
     
-    return -1.0;
+    return t; // this ray hits the triangle
 }
 
 Hit calcIntersectionTri(const Ray ray, const Triangle* triangle, const float t) {
@@ -59,7 +86,10 @@ Hit calcIntersectionTri(const Ray ray, const Triangle* triangle, const float t) 
 
 simd_float3 calcIntersectionTri2(const simd_float3 raydirection, Triangle* triangle, const float t) {
     simd_float3 hitnormal;
-    hitnormal = simd_normalize(simd_cross((triangle->b - triangle->a), (triangle->c - triangle->a)));
+    hitnormal =
+//    simd_normalize(simd_cross((triangle->b - triangle->a), (triangle->c - triangle->a)));
+    triangle->n;
+
     float d = simd_dot(hitnormal, raydirection);
     if (d > 0.0f) {
         hitnormal *= -1;
@@ -67,7 +97,8 @@ simd_float3 calcIntersectionTri2(const simd_float3 raydirection, Triangle* trian
     return hitnormal;
 }
 
-simd_float3 triImageTransform(simd_float3 point, Triangle* triangle) {
+simd_float3 triImageTransform2(Hit* hit, Triangle* triangle) {
+    simd_float3 point = hit->position;
     SDL_Surface* image = triangle->img;
     Uint8 r, g, b;
     Uint32 pixel;
@@ -94,9 +125,9 @@ simd_float3 triImageTransform(simd_float3 point, Triangle* triangle) {
     ctx = 20 * mm;
     cty = 35 * mm;
     
-    int x_img = (d1 * atx) + (d2 * btx) + (d3 * ctx);
-    int y_img = (d1 * aty) + (d2 * bty) + (d3 * cty);
-    
+    int x_img = (d1 * ctx) + (d2 * btx) + (d3 * ctx);
+    int y_img = ((d1 * cty) + (d2 * bty) + (d3 * cty));
+    y_img = image->h - y_img;
     pixel = ((Uint32*)(image->pixels))[(int)(y_img * image->w + x_img)];
     
     SDL_GetRGB(pixel, image->format, &r, &g, &b);
@@ -104,12 +135,134 @@ simd_float3 triImageTransform(simd_float3 point, Triangle* triangle) {
     return (simd_float3){(float)r, (float)g, (float)b};
 }
 
+simd_float3 triImageTransform4(Hit* hit, Triangle* triangle) {
+    simd_float3 point = hit->position;
+    SDL_Surface* image = triangle->img;
+    Uint8 r, g, b;
+    Uint32 pixel;
 
-Triangle makeTri(simd_float3 a, simd_float3 b, simd_float3 c, int material, SDL_Surface* sur) {
+    simd_float3 N = hit->normal;
+    float denom = simd_dot(N, N);
+    int mm = 1;
+
+    simd_float2 A = {0, 0}, B = {0, 35 * mm}, C = {20 * mm, 0}, PP = {0, 0};
+    
+    
+    simd_float3 P = hit->position;
+    
+    simd_float3 CC;
+    float u, v;
+    
+    // edge 0
+//    simd_float3 edge0 = triangle->b - triangle->a;
+//    simd_float3 vp0 = P - triangle->a;
+//    C = simd_cross(edge0, vp0);
+//    if (simd_dot(N, C) < 0) return -1; // P is on the right side
+
+    // edge 1
+    simd_float3 edge1 = triangle->c - triangle->b;
+    simd_float3 vp1 = P - triangle->b;
+    CC = simd_cross(edge1, vp1);
+
+    if ((u = simd_dot(N, CC)) < 0) {
+        return -1; // P is on the right side
+
+    }
+
+    // edge 2
+    simd_float3 edge2 = triangle->a - triangle->c;
+    simd_float3 vp2 = P - triangle->c;
+    CC = simd_cross(edge2, vp2);
+    if ((v = simd_dot(N, CC)) < 0) {
+        return -1; // P is on the right side;
+
+    }
+
+    u /= denom;
+    v /= denom;
+    
+//    PP = u*aa + v*cc + (1-u-v)*bb;
+//    PP = u * (cc - bb)  +  v * (aa - cc) + aa;
+
+    if (PP.x > 0) {
+        
+    }
+    PP.y = image->h - PP.y;
+    
+    float AreaABC = denom;
+    
+    float AreaPBC = simd_dot(N, simd_cross(triangle->b - P, triangle->c - P));
+    float aa = AreaPBC / AreaABC;
+    
+    float AreaPCA = simd_dot(N, simd_cross(triangle->c - P, triangle->a - P));
+    float bb = AreaPCA / AreaABC;
+    
+    float cc = 1.0f - aa - bb;
+    
+    PP = aa*A + bb*B + cc*C;
+    
+    PP.y = image->h - PP.y;
+    pixel = ((Uint32*)(image->pixels))[(int)(PP.y * image->w + PP.x)];
+    SDL_GetRGB(pixel, image->format, &r, &g, &b);
+    
+//
+    return (simd_float3){(float)r, (float)g, (float)b};
+    
+//    simd_float3 cols[3] = {{0.6, 0.4, 0.1}, {0.1, 0.5, 0.3}, {0.1, 0.3, 0.7}};
+//    simd_float3 r = {1, 0, 0}, g = {0, 1, 0}, b = {0, 0, 1};
+//    return u * r + v * g + (1-u-v) * b;
+//    return  u * cols[0] + v * cols[1] + (1 - u - v) * cols[2];
+}
+
+simd_float3 triImageTransform1(Hit* hit, Triangle* triangle) {
+    simd_float3 point = hit->position;
+    SDL_Surface* image = triangle->img;
+    Uint8 r, g, b;
+    Uint32 pixel;
+
+    simd_float3 N = hit->normal;
+//    float denom = simd_dot(N, N);
+    int mm = 1;
+
+    simd_float2 A = {0, 0}, B = {0, 35 * mm}, C = {20 * mm, 0}, PP = {0, 0};
+    
+    
+    simd_float3 P = hit->position;
+    float u, v, w;
+    
+    simd_float3 v0 = triangle->b-triangle->a, v1 = triangle->c-triangle->a, v2 = P-triangle->a;
+    
+//    simd_float3 u = triangle->b - triangle->a;
+//    simd_float3 v = triangle->b - triangle->a;
+//    simd_float3 w = triangle->a - ray.origin;
+//    w = ray.direction * t - w;
+    float d00 = simd_dot(v0, v0);
+    float d01 = simd_dot(v0, v1);
+    float d11 = simd_dot(v1, v1);
+    float d20 = simd_dot(v2, v0);
+    float d21 = simd_dot(v2, v1);
+    float denom = d00*d11 - d01*d01;
+    v = (d11 * d20 - d01 * d21) / denom;
+    w = (d00 * d21 - d01 * d20) / denom;
+    
+    PP = v * A + w * C + (1 - v - w) * B;
+    
+//    PP.y = image->h - PP.y;
+    pixel = ((Uint32*)(image->pixels))[(int)(PP.y * image->w + PP.x)];
+    SDL_GetRGB(pixel, image->format, &r, &g, &b);
+    
+    return (simd_float3){(float)r, (float)g, (float)b};
+}
+
+
+Triangle makeTri(simd_float3 a, simd_float3 b, simd_float3 c, Material* material, SDL_Surface* sur) {
     Triangle object;
     object.a = a;
     object.b = b;
     object.c = c;
+    object.n = simd_normalize(simd_cross((object.b - object.a), (object.c - object.a)));
+//    printf("TN: %f %f %f \n", object.n.x, object.n.y, object.n.z);
+    object.m = (a + b + c)/3;
     object.mat = material;
     object.img = sur;
     return object;
@@ -120,3 +273,5 @@ void add_Triangle(Triangle object) {
         _triangles[numTriangles++] = object;
     }
 }
+
+

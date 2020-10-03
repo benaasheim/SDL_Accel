@@ -45,7 +45,8 @@ simd_float3 calcIntersectionSph2(const simd_float3 position, const Sphere* spher
     return (position - sphere->c)/sphere->r;
 }
 
-simd_float3 sphImageTransform3(simd_float3 point, simd_float3 norm, Sphere* sphere) {
+simd_float3 sphImageTransform3(Hit* hit, Sphere* sphere) {
+    simd_float3 norm = hit->normal;
     SDL_Surface* image = sphere->img;
     Uint8 r, g, b;
     Uint32 pixel;
@@ -74,7 +75,7 @@ simd_float3 sphImageTransform3(simd_float3 point, simd_float3 norm, Sphere* sphe
     return retv;
 }
 
-Sphere makeSph(simd_float3 center, float radius, int material, SDL_Surface* sur) {
+Sphere makeSph(simd_float3 center, float radius, Material* material, SDL_Surface* sur) {
     Sphere object;
     object.c = center;
     object.r = radius;
